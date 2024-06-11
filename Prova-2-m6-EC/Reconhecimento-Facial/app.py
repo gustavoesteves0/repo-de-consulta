@@ -1,7 +1,9 @@
 from flask import Flask, Response, jsonify, send_from_directory
 import cv2
-import time
 import threading
+import time
+import numpy as np
+from collections import deque
 
 app = Flask(__name__)
 
@@ -19,7 +21,9 @@ if profile_face_cascade.empty():
 cap = cv2.VideoCapture(0)
 cap_lock = threading.Lock()
 
+# Variáveis globais para cálculo de latência
 last_frame_time = time.time()
+latency_values = deque(maxlen=10)
 
 @app.route("/")
 def read_root():
@@ -34,11 +38,14 @@ def stream():
 
 @app.route("/latency")
 def get_latency():
-    latency = estimate_latency()
-    return jsonify(latency=latency)
+    global latency_values
+    avg_latency = sum(latency_values) / len(latency_values) if latency_values else 0
+    return jsonify(latency=avg_latency)
 
 def generate_video():
     global last_frame_time
+    global latency_values
+
     while True:
         with cap_lock:
             ret, frame = cap.read()
@@ -70,16 +77,16 @@ def generate_video():
         # Definir o delimitador de frames
         boundary = b'--frame\r\nContent-Type: image/jpeg\r\n\r\n'
 
+        # Calcular a latência
+        current_time = time.time()
+        frame_latency = (current_time - last_frame_time) * 1000  # Convert latency to milliseconds
+        latency_values.append(frame_latency)
+
         # Enviar o frame com o delimitador
         yield boundary + frame_bytes + b'\r\n'
 
         # Atualizar o tempo do último frame
-        last_frame_time = time.time()
-
-def estimate_latency():
-    current_time = time.time()
-    latency = (current_time - last_frame_time) * 1000  # Convert latency to milliseconds
-    return latency
+        last_frame_time = current_time
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
