@@ -6,15 +6,20 @@ import threading
 app = Flask(__name__)
 
 # Inicializar os classificadores de detecção de rostos
-frontal_face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
-profile_face_cascade = cv2.CascadeClassifier('haarcascade_profileface.xml')
+frontal_face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+profile_face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_profileface.xml')
 
-print(frontal_face_cascade)
-print(profile_face_cascade)
+# Verificar se os classificadores foram carregados corretamente
+if frontal_face_cascade.empty():
+    print("Erro: O classificador de detecção de rostos frontal não pôde ser carregado.")
+if profile_face_cascade.empty():
+    print("Erro: O classificador de detecção de rostos de perfil não pôde ser carregado.")
 
 # Inicializar o objeto de captura de vídeo
 cap = cv2.VideoCapture(0)
 cap_lock = threading.Lock()
+
+last_frame_time = time.time()
 
 @app.route("/")
 def read_root():
@@ -33,6 +38,7 @@ def get_latency():
     return jsonify(latency=latency)
 
 def generate_video():
+    global last_frame_time
     while True:
         with cap_lock:
             ret, frame = cap.read()
@@ -42,17 +48,20 @@ def generate_video():
         # Converter a imagem para escala de cinza
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # Detectar rostos frontais na imagem
-        frontal_faces = frontal_face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        # Verificar se os classificadores estão vazios
+        if not frontal_face_cascade.empty():
+            # Detectar rostos frontais na imagem
+            frontal_faces = frontal_face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+            # Desenhar retângulos em rostos frontais
+            for (x, y, w, h) in frontal_faces:
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
 
-        # Detectar rostos de perfil na imagem
-        profile_faces = profile_face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-
-        # Desenhar um retângulo ao redor de cada rosto detectado
-        for (x, y, w, h) in frontal_faces:
-            cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
-        for (x, y, w, h) in profile_faces:
-            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        if not profile_face_cascade.empty():
+            # Detectar rostos de perfil na imagem
+            profile_faces = profile_face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+            # Desenhar retângulos em rostos de perfil
+            for (x, y, w, h) in profile_faces:
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
         # Codificar o frame em formato JPEG
         _, jpeg = cv2.imencode('.jpg', frame)
@@ -64,12 +73,12 @@ def generate_video():
         # Enviar o frame com o delimitador
         yield boundary + frame_bytes + b'\r\n'
 
+        # Atualizar o tempo do último frame
+        last_frame_time = time.time()
+
 def estimate_latency():
-    start_time = time.time()
-    with cap_lock:
-        cap.read()
-    end_time = time.time()
-    latency = (end_time - start_time) * 1000  # Convert latency to milliseconds
+    current_time = time.time()
+    latency = (current_time - last_frame_time) * 1000  # Convert latency to milliseconds
     return latency
 
 if __name__ == "__main__":
