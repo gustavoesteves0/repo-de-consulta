@@ -1,5 +1,5 @@
 
-from flask import Flask, Response, jsonify, send_from_directory
+from flask import Flask, Response, send_from_directory
 import cv2
 import threading
 import numpy as np
@@ -18,6 +18,8 @@ if profile_face_cascade.empty():
 
 # Inicializar a captura do vídeo
 cap = cv2.VideoCapture('video.mp4')
+if not cap.isOpened():
+    print("Erro: Não foi possível abrir o arquivo de vídeo.")
 cap_lock = threading.Lock()
 
 @app.route("/")
@@ -36,6 +38,7 @@ def generate_video():
         with cap_lock:
             ret, frame = cap.read()
         if not ret:
+            print("Erro: Não foi possível ler o frame.")
             break
 
         # Converter a imagem para escala de cinza
