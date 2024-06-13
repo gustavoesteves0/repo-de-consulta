@@ -37,14 +37,34 @@
     img.src = 'data:image/jpeg;base64,' + message.data;
   });
 
+  // Topic to receive latency timestamps
+  var latencyTopic = new ROSLIB.Topic({
+    ros : ros,
+    name : '/latency',
+    messageType : 'std_msgs/String'
+  });
+
+  // Function to handle incoming latency timestamps
+  latencyTopic.subscribe(function(message) {
+    var sentTime = Date.parse(message.data);
+    var receivedTime = Date.now();
+    console.log('Sent time: ', sentTime);
+    console.log('Received time: ', receivedTime);
+    var latency = receivedTime - sentTime;
+    document.getElementById('latency').textContent = latency + ' ms';
+  });
+
   window.onload = function() {
-    // Subscribe to video frames once
+    // Subscribe to video frames and latency timestamps once
     videoTopic.subscribe();
+    latencyTopic.subscribe();
   };
 </script>
 </head>
 <body>
   <h1>Real-time Video Stream from ROS2 Topic</h1>
   <img id="videoStream" alt="Video Stream" style="width: 640px; height: 480px;" />
+  <h2>Latency Information</h2>
+  <p>Estimated Latency: <span id="latency">N/A</span></p>
 </body>
 </html>
